@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Checkers Engine Test Board</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>Checkers engine test board</h1>
+    <div id="health" class="badge badge-pending" title="GET /healthz">checking engine…</div>
+  </header>
+
+  <main class="layout">
+    <section class="board-column">
+      <div id="status" class="status" aria-live="polite">Loading…</div>
+      <div id="board" class="board" role="grid" aria-label="Checkers board"></div>
+      <div class="board-actions">
+        <button id="engine-move" type="button" class="primary">Engine move</button>
+        <button id="undo" type="button">Undo</button>
+        <button id="flip" type="button">Flip board</button>
+        <button id="new-game" type="button">New game</button>
+      </div>
+    </section>
+
+    <section class="side-column">
+      <div class="panel">
+        <h2>Game</h2>
+        <div class="field-row">
+          <label for="human-side">You play</label>
+          <select id="human-side">
+            <option value="B">Black (moves first)</option>
+            <option value="W">White</option>
+            <option value="-">Nobody (engine vs engine)</option>
+          </select>
+        </div>
+        <div class="field-row">
+          <label for="level">Engine level</label>
+          <select id="level">
+            <option value="weak">weak (depth 6–8 / 100 ms)</option>
+            <option value="medium" selected>medium (depth 10–12 / 250 ms)</option>
+            <option value="strong">strong (tablebase, depth 14–18 / 500 ms)</option>
+          </select>
+        </div>
+        <label class="check"><input id="auto-reply" type="checkbox" checked> Engine replies automatically</label>
+      </div>
+
+      <div class="panel">
+        <h2>Position (PDN)</h2>
+        <div class="field-row stack">
+          <input id="pdn" type="text" spellcheck="false" autocomplete="off" aria-label="PDN position">
+          <div class="inline">
+            <select id="samples" aria-label="Sample positions">
+              <option value="">Sample positions…</option>
+              <option value="B:W21-32:B1-12">Initial position</option>
+              <option value="B:W18,19,22,25,27,28,30,32:B1,5,6,7,10,12,14,16">Task example (midgame, Black to move)</option>
+              <option value="W:W17,21,22,23,25,26,27,28,30:B1,2,3,5,6,7,9,11,12,15">Midgame, White to move (19 pieces)</option>
+              <option value="W:W18,22,25,30:B1,5,10">Tablebase win, 7 pieces</option>
+              <option value="B:W18,22,25:B1,5,10,14">Tablebase, forced capture</option>
+              <option value="W:WK10,K14:BK1,K3">Tablebase draw, 4 kings</option>
+              <option value="W:WK14,K22:BK1">2 kings vs 1 king</option>
+            </select>
+            <button id="load-pdn" type="button">Load</button>
+          </div>
+        </div>
+        <div id="pdn-error" class="error" hidden></div>
+      </div>
+
+      <div class="panel">
+        <h2>Last engine answer</h2>
+        <dl id="engine-stats" class="stats">
+          <div><dt>Best move</dt><dd id="s-move">–</dd></div>
+          <div><dt>Score / WDL</dt><dd id="s-score">–</dd></div>
+          <div><dt>Depth</dt><dd id="s-depth">–</dd></div>
+          <div><dt>Nodes</dt><dd id="s-nodes">–</dd></div>
+          <div><dt>Tablebase</dt><dd id="s-tb">–</dd></div>
+          <div><dt>Time</dt><dd id="s-time">–</dd></div>
+        </dl>
+        <div id="s-pv" class="pv"></div>
+        <details>
+          <summary>Raw response</summary>
+          <pre id="raw"></pre>
+        </details>
+      </div>
+
+      <div class="panel">
+        <h2>Moves</h2>
+        <ol id="history" class="history"></ol>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
