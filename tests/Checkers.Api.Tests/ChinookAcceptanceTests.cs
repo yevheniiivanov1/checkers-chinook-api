@@ -2,7 +2,11 @@ using System.Diagnostics;
 using System.Net;
 using Checkers.Core;
 using Microsoft.AspNetCore.Hosting;
+using Checkers.Api.Engine;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Hosting.Internal;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 
 namespace Checkers.Api.Tests;
 
@@ -217,6 +221,35 @@ public sealed class ChinookAcceptanceTests(ChinookApp app) : IClassFixture<Chino
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
         Assert.Equal(0, (await response.Body()).GetProperty("workers").GetInt32());
         Directory.Delete(databases);
+    }
+
+    /// <summary>
+    /// Under IIS the worker's account has no Documents folder, where KingsRow would put its log (and
+    /// without which it ends the process). The API gives it logs\kingsrow next to its own logs.
+    /// </summary>
+    [Fact]
+    public async Task KingsRow_writes_its_log_next_to_the_api_logs_not_to_documents()
+    {
+        SkipUnlessInstalled();
+        var root = Directory.CreateTempSubdirectory("checkers-site-").FullName;
+        var documentsLogs = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Ed Gilbert", "Kingsrow");
+        int DocumentsLogCount() => Directory.Exists(documentsLogs) ? Directory.GetFiles(documentsLogs).Length : 0;
+        var before = DocumentsLogCount();
+
+        await using (var pool = new EngineWorkerPool(
+            Options.Create(new EngineOptions { Type = "chinook", Path = ChinookApp.EnginePath, Databases = ChinookApp.Databases, Workers = 1 }),
+            Options.Create(new LogFileOptions { Directory = "logs" }),
+            new HostingEnvironment { ContentRootPath = root },
+            NullLogger<EngineWorkerPool>.Instance,
+            NullLoggerFactory.Instance))
+        {
+            await pool.StartAsync(TestContext.Current.CancellationToken);
+            Assert.Equal(1, pool.Status.ReadyWorkers);
+        }
+
+        Assert.NotEmpty(Directory.GetFiles(Path.Combine(root, "logs", "kingsrow", "Ed Gilbert", "Kingsrow"), "Kingsrow*.log"));
+        Assert.Equal(before, DocumentsLogCount());
+        Directory.Delete(root, recursive: true);
     }
 
     private static void AssertLegal(string pdn, string? move) =>

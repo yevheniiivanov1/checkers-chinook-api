@@ -32,6 +32,7 @@ internal sealed class EngineWorker : IEngineAdapter, IAsyncDisposable
 
     private readonly EngineOptions _options;
     private readonly string _hostPath;
+    private readonly string? _engineLogDirectory;
     private readonly JobObject? _job;
     private readonly ILogger _logger;
     private long _nextRequestId;
@@ -40,10 +41,12 @@ internal sealed class EngineWorker : IEngineAdapter, IAsyncDisposable
     private int _state = (int)WorkerState.Stopped;
     private volatile bool _disposed;
 
-    public EngineWorker(int id, EngineOptions options, string hostPath, JobObject? job, ILogger logger)
+    /// <param name="engineLogDirectory">Where the engine writes its own log; null for its default (the account's Documents).</param>
+    public EngineWorker(int id, EngineOptions options, string hostPath, string? engineLogDirectory, JobObject? job, ILogger logger)
     {
         Id = id;
         _options = options;
+        _engineLogDirectory = engineLogDirectory;
         _hostPath = hostPath;
         _job = job;
         _logger = logger;
@@ -74,7 +77,7 @@ internal sealed class EngineWorker : IEngineAdapter, IAsyncDisposable
             _channel?.Kill();
             _channel = StartProcess();
 
-            var init = new WorkerInit(_options.Type, _options.Path, _options.Databases, _options.HashMb, _options.DbCacheMb);
+            var init = new WorkerInit(_options.Type, _options.Path, _options.Databases, _options.HashMb, _options.DbCacheMb, _engineLogDirectory);
             var response = await RequestAsync(new WorkerRequest(NextId(), WorkerCommands.Init) { Init = init }, cancellationToken);
             Info = response.Engine;
 

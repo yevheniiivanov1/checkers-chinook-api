@@ -47,7 +47,7 @@ internal sealed unsafe partial class KingsRowEngine : IEngine
             throw new FileNotFoundException($"KingsRow engine DLL not found at '{dllPath}'.", dllPath);
         }
 
-        Load(dllPath);
+        Load(dllPath, init.LogDirectory);
 
         // KingsRow keeps its settings in the registry (HKCU), so whatever CheckerBoard last set on
         // this machine would apply. Everything that could add randomness or change the status line
@@ -212,7 +212,27 @@ internal sealed unsafe partial class KingsRowEngine : IEngine
         return match.Success ? int.Parse(match.Groups["pieces"].Value) : 0;
     }
 
-    private void Load(string dllPath)
+    /// <summary>
+    /// When no log directory is configured KingsRow writes to Documents\Ed Gilbert\Kingsrow, and if it
+    /// cannot open that log it ends the whole process with a C runtime fast-fail (0xC0000409) — no
+    /// exception, no message. The folders are created first, and an account without a Documents
+    /// folder (an IIS app pool identity, for one) is reported instead of crashing; the API avoids
+    /// that case by always passing a log directory (see <see cref="DocumentsRedirect"/>).
+    /// </summary>
+    internal static string EnsureLogDirectory()
+    {
+        var documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments, Environment.SpecialFolderOption.Create);
+        if (string.IsNullOrEmpty(documents))
+        {
+            throw new InvalidOperationException(
+                "KingsRow needs a Documents folder for its log, and this account has none. " +
+                "Under IIS, set the app pool's 'Load User Profile' to true.");
+        }
+
+        return Directory.CreateDirectory(Path.Combine(documents, "Ed Gilbert", "Kingsrow")).FullName;
+    }
+
+    private void Load(string dllPath, string? logDirectory)
     {
         var directory = Path.GetDirectoryName(dllPath)!;
 
@@ -222,8 +242,18 @@ internal sealed unsafe partial class KingsRowEngine : IEngine
         var parent = Path.GetDirectoryName(directory);
         Environment.SetEnvironmentVariable("PATH", $"{directory};{parent};{Environment.GetEnvironmentVariable("PATH")}");
 
+        if (logDirectory is null)
+        {
+            EnsureLogDirectory();
+        }
+
         TimerResolution.RequestOneMillisecond();
         _library = NativeLibrary.Load(dllPath);
+        if (logDirectory is not null)
+        {
+            // Before the first engine command, which is when KingsRow opens its log.
+            DocumentsRedirect.Install(_library, Directory.CreateDirectory(logDirectory).FullName);
+        }
         _getMove = (delegate* unmanaged[Stdcall]<int*, int, double, byte*, int*, int, int, void*, int>)NativeLibrary.GetExport(_library, "getmove");
         _engineCommand = (delegate* unmanaged[Stdcall]<byte*, byte*, int>)NativeLibrary.GetExport(_library, "enginecommand");
 

@@ -23,14 +23,20 @@ internal sealed class EngineWorkerPool : IEnginePool, IHostedService, IAsyncDisp
     private Task? _stopTask;
     private int _next = -1;
 
-    public EngineWorkerPool(IOptions<EngineOptions> options, ILogger<EngineWorkerPool> logger, ILoggerFactory loggerFactory)
+    public EngineWorkerPool(
+        IOptions<EngineOptions> options,
+        IOptions<LogFileOptions> logFiles,
+        IHostEnvironment environment,
+        ILogger<EngineWorkerPool> logger,
+        ILoggerFactory loggerFactory)
     {
         _options = options.Value;
         _logger = logger;
         var hostPath = ResolveHostPath(_options.HostPath);
+        var engineLogDirectory = EngineLogDirectory(logFiles.Value, environment);
         var workerLogger = loggerFactory.CreateLogger<EngineWorker>();
         _workers = Enumerable.Range(1, _options.Workers)
-            .Select(id => new EngineWorker(id, _options, hostPath, _job, workerLogger))
+            .Select(id => new EngineWorker(id, _options, hostPath, engineLogDirectory, _job, workerLogger))
             .ToArray();
         _restarting = new int[_workers.Length];
         foreach (var worker in _workers)
@@ -202,6 +208,16 @@ internal sealed class EngineWorkerPool : IEnginePool, IHostedService, IAsyncDisp
             }
         }
     }
+
+    /// <summary>
+    /// The engine's own log goes next to the API's (logs\kingsrow): a folder the site can write to.
+    /// Left to itself KingsRow would use the account's Documents folder, which an IIS app pool
+    /// identity does not have. Null when file logging is off.
+    /// </summary>
+    private static string? EngineLogDirectory(LogFileOptions logFiles, IHostEnvironment environment) =>
+        string.IsNullOrWhiteSpace(logFiles.Directory)
+            ? null
+            : Path.Combine(Path.GetFullPath(logFiles.Directory, environment.ContentRootPath), "kingsrow");
 
     private static string ResolveHostPath(string? configured)
     {

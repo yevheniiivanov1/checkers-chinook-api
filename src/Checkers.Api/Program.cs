@@ -39,6 +39,7 @@ builder.Services.AddOptions<EngineOptions>()
     .ValidateOnStart();
 builder.Services.AddOptions<CacheOptions>().Bind(builder.Configuration.GetSection(CacheOptions.Section)).ValidateDataAnnotations().ValidateOnStart();
 builder.Services.AddOptions<LimitsOptions>().Bind(builder.Configuration.GetSection(LimitsOptions.Section)).ValidateDataAnnotations().ValidateOnStart();
+builder.Services.AddOptions<LogFileOptions>().Bind(builder.Configuration.GetSection(LogFileOptions.Section));
 builder.Services.AddOptions<RateLimitOptions>().Bind(builder.Configuration.GetSection(RateLimitOptions.Section)).ValidateDataAnnotations().ValidateOnStart();
 builder.Services.Configure<Dictionary<string, LevelOptions>>(builder.Configuration.GetSection("Levels"));
 

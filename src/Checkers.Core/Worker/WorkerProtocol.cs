@@ -30,7 +30,8 @@ public sealed record WorkerRequest(long Id, string Type)
 /// <param name="Engine"><c>chinook</c> (KingsRow DLL probing the Chinook databases) or <c>builtin</c>.</param>
 /// <param name="EnginePath">Path to the CheckerBoard-API engine DLL, e.g. Kingsrow64.dll.</param>
 /// <param name="DatabasePath">Directory with the Chinook WLD endgame database files.</param>
-public sealed record WorkerInit(string Engine, string? EnginePath, string? DatabasePath, int HashMb, int DbCacheMb);
+/// <param name="LogDirectory">Where the engine's own log goes; null leaves it in the account's Documents folder.</param>
+public sealed record WorkerInit(string Engine, string? EnginePath, string? DatabasePath, int HashMb, int DbCacheMb, string? LogDirectory = null);
 
 /// <summary>
 /// The worker stops at the first of: an iteration deeper than <paramref name="MaxDepth"/> starting,

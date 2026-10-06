@@ -87,6 +87,16 @@ public sealed class KingsRowTests
     public void Reads_the_loaded_database_size_from_about(string about, int pieces) =>
         Assert.Equal(pieces, KingsRowEngine.ParseTablebasePieces(about));
 
+    [Fact]
+    public void The_log_folder_kingsrow_needs_exists_before_it_is_loaded()
+    {
+        // KingsRow ends the process with 0xC0000409 when it cannot open this log (seen under IIS).
+        var folder = KingsRowEngine.EnsureLogDirectory();
+
+        Assert.True(Directory.Exists(folder));
+        Assert.EndsWith(Path.Combine("Ed Gilbert", "Kingsrow"), folder);
+    }
+
     /// <summary>numbertocoors() in cb_interface.h for English checkers.</summary>
     [Theory]
     [InlineData(1, 6, 0)]

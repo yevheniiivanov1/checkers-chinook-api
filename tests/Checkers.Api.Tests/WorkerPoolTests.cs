@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Checkers.Api.Engine;
 using Checkers.Core;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting.Internal;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
@@ -92,6 +93,8 @@ public sealed class WorkerPoolTests(BuiltinEngineApp app) : IClassFixture<Builti
         var ct = TestContext.Current.CancellationToken;
         var pool = new EngineWorkerPool(
             Options.Create(new EngineOptions { Type = "builtin", Workers = 2 }),
+            Options.Create(new LogFileOptions { Directory = "" }),
+            new HostingEnvironment { ContentRootPath = AppContext.BaseDirectory },
             NullLogger<EngineWorkerPool>.Instance,
             NullLoggerFactory.Instance);
         await pool.StartAsync(ct);
