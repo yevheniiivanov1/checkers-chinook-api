@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>English checkers rules: PDN positions, legal move generation, move notation, and the wire protocol shared by the API and the engine worker process.</Description>
+  </PropertyGroup>
+
+</Project>
