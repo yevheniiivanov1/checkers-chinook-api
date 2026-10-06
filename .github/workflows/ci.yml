@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  build-and-test:
+    # Windows, as in production: the worker uses Windows job objects and the IIS web.config.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Build
+        run: dotnet build -c Release
+
+      # KingsRow and the Chinook databases are not installed here, so the API tests run real worker
+      # processes with the builtin engine and the Chinook acceptance tests report as skipped.
+      - name: Test
+        run: dotnet test -c Release --no-build
+
+      - name: Publish (IIS layout)
+        run: dotnet publish src/Checkers.Api -c Release -o artifacts/publish
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: checkers-api
+          path: artifacts/publish
