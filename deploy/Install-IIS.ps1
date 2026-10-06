@@ -1,13 +1,16 @@
 #Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-    Publishes the API and hosts it in IIS on Windows Server as a normal ASP.NET Core app
-    (in-process, ASP.NET Core Module V2; no Windows Service).
+    Publishes the API and hosts it in IIS as a normal ASP.NET Core app (in-process, ASP.NET Core
+    Module V2; no Windows Service). Tested on Windows 11 Pro; the cmdlets are the same on Server.
 
 .DESCRIPTION
-    Prerequisites (once per server):
-      Install-WindowsFeature Web-Server, Web-Scripting-Tools, Web-AppInit
-      .NET 10 Hosting Bundle (dotnet-hosting-10.x-win.exe), then iisreset
+    Prerequisites (once per machine):
+      Windows Server: Install-WindowsFeature Web-Server, Web-Scripting-Tools, Web-AppInit
+      Windows 10/11:  Enable-WindowsOptionalFeature -Online -All -FeatureName IIS-WebServerRole,
+                      IIS-WebServer, IIS-ManagementScriptingTools, IIS-ApplicationInit
+      .NET 10 Hosting Bundle (dotnet-hosting-10.x-win.exe; if it was installed before IIS, run it
+      again and choose Repair so it adds the module to IIS), then iisreset
       KingsRow + Chinook databases: .\deploy\Install-Engine.ps1
 
     What it does:

@@ -177,6 +177,11 @@ requests within the cache TTL get identical answers.
 - A worker that is pointed at a database folder but loads no database (wrong folder, or a non-ASCII path,
   which the 8-bit `enginecommand()` would garble) fails to start, so `/healthz` reports it instead of
   the service quietly answering without tablebases.
+- KingsRow writes its own log under `SHGetFolderPathA(CSIDL_PERSONAL)` — Documents — and ends the
+  process (0xC0000409) if it cannot. An IIS app pool identity gets no Documents folder from Windows, even
+  with its profile loaded, so under IIS every worker died two seconds after starting. The worker rewrites
+  that one import in the loaded DLL's import address table so Documents means `logs\kingsrow`, next to
+  the API's logs; other folder requests pass through.
 - All workers are in a Windows job object with kill-on-close: an app pool recycle or crash takes them
   down with w3wp. The pool waits for a graceful stop before closing the job.
 
@@ -185,6 +190,7 @@ requests within the cache TTL get identical answers.
 One JSON line per request (Serilog, compact log event format), to stdout and to
 `logs\checkers-api-<date>.json`, which roll daily and at 100 MB, 14 files kept (`LogFiles` section).
 The ASP.NET Core Module's own stdout log is off: it never rolls and is meant for diagnosing start-up.
+KingsRow's own logs (settings, database loading, each search) are in `logs\kingsrow`.
 
 ```json
 {"@t":"2026-10-06T18:47:16.3591826Z","@mt":"{Method} {Path} -> {StatusCode} in {TimeMs} ms; requestId={RequestId} …",
@@ -209,11 +215,16 @@ Paths are in `src/Checkers.Api/appsettings.json` (`Engine:Path` is the DLL:
 small alpha-beta engine in the same worker process, so everything else works the same (answers say
 `"engine": "builtin"`).
 
-### IIS (Windows Server)
+### IIS
 
 ```powershell
+# Windows Server
 Install-WindowsFeature Web-Server, Web-Scripting-Tools, Web-AppInit
-# install the .NET 10 Hosting Bundle, then: iisreset
+# Windows 10/11
+Enable-WindowsOptionalFeature -Online -All -FeatureName IIS-WebServerRole, IIS-WebServer, IIS-ManagementScriptingTools, IIS-ApplicationInit
+
+# then install the .NET 10 Hosting Bundle (if it was installed before IIS, run it again and Repair), and:
+iisreset
 .\deploy\Install-IIS.ps1 -Port 8080                 # publish, app pool, site, permissions, health check
 .\deploy\Test-Acceptance.ps1 -BaseUrl http://localhost:8080
 ```
@@ -229,42 +240,47 @@ under IIS Express with the same ASP.NET Core Module, in-process.
 
 ## Verified
 
-On the development machine (Windows 11, KingsRow 1.20, Chinook 2–7 piece databases), hosted under IIS
-Express with ANCM V2, `deploy\Test-Acceptance.ps1` (times measured by the client, round trip included;
-the cache is bypassed and every answer checked to be `cached: false`, so repeated runs measure the engine):
+Deployed with `deploy\Install-IIS.ps1` to IIS 10 on Windows 11 Pro (app pool identity
+`IIS AppPool\CheckersApi`, KingsRow 1.20, Chinook 2–7 piece databases), then checked with
+`deploy\Test-Acceptance.ps1` — times measured by the client, round trip included; the cache is
+bypassed and every answer checked to be `cached: false`, so repeated runs measure the engine:
 
 | Criterion | Result |
 |-----------|--------|
 | Health check ok on startup | 200, 2/2 workers |
-| Tablebase ≤ 8 pieces < 50 ms, `tablebaseHit` | 7–30 ms over four positions |
-| Midgame, strong, < 600 ms, legal | 95–157 ms, depth 17 |
+| Tablebase ≤ 8 pieces < 50 ms, `tablebaseHit` | 7–24 ms over four positions |
+| Midgame, strong, < 600 ms, legal | 89–153 ms, depth 17 |
 | Invalid PDN → 422 | 422 |
-| Timeout → 504 | 504 at 206–218 ms for `hardTimeMs: 200` with both workers busy |
+| Timeout → 504 | 504 at 205 ms for `hardTimeMs: 200` with both workers busy |
+
+Also under IIS: `Restart-WebAppPool` closed the old workers' stdin (they logged their exit), and the new
+w3wp had two warm workers 1.3 s later, the site answering 503 for about 2 s in between (overlapped
+recycle is off). `Stop-Process w3wp -Force` took both workers down with it through the job object, and
+IIS started a new w3wp with new workers straight away (`AlwaysRunning`). The same acceptance run passes
+under IIS Express (`Run-IISExpress.ps1`).
 
 Not verified here:
 
-- **Full IIS.** This machine has no IIS role, so the hosting path was checked under IIS Express, which
-  uses the same module and in-process model but runs as the signed-in user. `Install-IIS.ps1` — the app
-  pool identity, its permissions on the engine and database folders, the user profile KingsRow writes
-  its settings to — was not run.
+- **Windows Server.** The IIS deployment above ran on Windows 11 Pro; `Install-IIS.ps1` uses the same
+  IIS cmdlets on Server, where the role is added with `Install-WindowsFeature` instead.
 - **8-piece databases.** Only the 2–7 piece files are installed here, so 8-piece positions are searched,
   not looked up, and the 50 ms target is confirmed for up to 7 pieces. The 8-piece set is 5.6 GB; with
   `DbCacheMb = 256` per worker, cold lookups would read from disk.
 
 ## Tests
 
-`dotnet test` — 190 tests:
+`dotnet test` — 192 tests:
 
-- **Core** (102): perft from the initial position to depth 8 (845 931, the published count), PDN parsing
+- **Core** (103): perft from the initial position to depth 8 (845 931, the published count), PDN parsing
   and every validation rule (including non-ASCII digits), captures, multi-jumps, crowning, notation and
   separators; KingsRow status-line parsing on real output, board conversion against `cb_interface.h`,
   game-value rules; the builtin engine and its stop reasons.
-- **API** (88), against real worker processes: the HTTP contract, 422/400/429 cases, cache and cache
+- **API** (89), against real worker processes: the HTTP contract, 422/400/429 cases, cache and cache
   bypass, request ids; 503/500/504, pv fallback, retry after a worker failure and caching of cut-short
   answers through a pool double; round robin, queueing, cancellation, crash restart and shutdown of the
   process pool; LRU and level policy units.
-- **Acceptance** (15 of the 88): the task's criteria against KingsRow + Chinook, weak-level
-  reproducibility, and a database folder KingsRow cannot use. They run when the DLL and databases are
+- **Acceptance** (16 of the 89): the task's criteria against KingsRow + Chinook, weak-level
+  reproducibility, a database folder KingsRow cannot use, and where KingsRow writes its log. They run when the DLL and databases are
   found (`CHECKERS_ENGINE_PATH`, `CHECKERS_DATABASES`, defaults as above) and are skipped otherwise,
   e.g. in CI.
 
