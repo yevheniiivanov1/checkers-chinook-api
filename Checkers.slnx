@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Checkers.Core/Checkers.Core.csproj" />
+    <Project Path="src/Checkers.EngineHost/Checkers.EngineHost.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Checkers.Core.Tests/Checkers.Core.Tests.csproj" />
