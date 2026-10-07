@@ -5,6 +5,10 @@ the engine's best move. Endgames of up to 8 pieces are answered from the Chinook
 everything else is searched by KingsRow. A small web board at `/` plays against the service, so it
 can be checked by hand.
 
+Running instance: <https://checkers-chinook-api.azurewebsites.net/> — Azure App Service on Windows
+(IIS, in-process), KingsRow 1.20 with the Chinook 2–7 piece databases, Free tier: after 20 minutes
+without requests the app is unloaded, and the first request after that takes about 4 seconds.
+
 ```
  browser / client
        │  HTTP: POST /v1/move/suggest, /v1/move/validate, GET /healthz
@@ -238,6 +242,24 @@ installer only if its SHA-256 matches the pinned one.
 Without the IIS role (no admin rights needed), `.\deploy\Run-IISExpress.ps1` runs the same publish output
 under IIS Express with the same ASP.NET Core Module, in-process.
 
+### Azure App Service (Windows)
+
+```powershell
+az login
+.\deploy\Deploy-Azure.ps1 -AppName checkers-chinook-api -Location polandcentral -Sku F1
+.\deploy\Test-Acceptance.ps1 -BaseUrl https://checkers-chinook-api.azurewebsites.net -ServerTime
+```
+
+App Service on Windows is IIS with the same module, so the app runs unchanged; the script only sets
+paths through app settings. KingsRow and the databases go to `D:\home\data` (outside `wwwroot`, so a code
+deploy does not re-upload them; `-SkipData` skips them), logs to `D:\home\LogFiles\checkers-api`. Two
+things differ from a server of your own: the sandbox does not allow registry writes, which KingsRow
+survives (every setting is sent at start anyway), and it gives the app no Documents folder, which the
+log redirect above already covers. The Free tier runs a 32-bit w3wp, so the worker is published
+self-contained for x64; it also has 1 GB of memory for everything, so the engine hash and database cache
+are reduced to 32 and 64 MB per worker. `-ServerTime` judges the time limits by the time the service
+reports, since the round trip from the client alone can be longer than 50 ms.
+
 ## Verified
 
 Deployed with `deploy\Install-IIS.ps1` to IIS 10 on Windows 11 Pro (app pool identity
@@ -258,6 +280,17 @@ w3wp had two warm workers 1.3 s later, the site answering 503 for about 2 s in b
 recycle is off). `Stop-Process w3wp -Force` took both workers down with it through the job object, and
 IIS started a new w3wp with new workers straight away (`AlwaysRunning`). The same acceptance run passes
 under IIS Express (`Run-IISExpress.ps1`).
+
+The same checks against the Azure instance above (F1, Poland Central, 32/64 MB engine caches), by the
+service's own `info.timeMs`; the client saw about 50 ms more per request (the round trip):
+
+| Criterion | Result |
+|-----------|--------|
+| Health check ok on startup | 200, 2/2 workers |
+| Tablebase ≤ 7 pieces < 50 ms, `tablebaseHit` | 16–25 ms |
+| Midgame, strong, < 600 ms, legal | 124–296 ms, depth 17–19 (177–350 ms at the client) |
+| Invalid PDN → 422 | 422 |
+| Timeout → 504 | 504 at 306 ms at the client for `hardTimeMs: 200` with both workers busy |
 
 Not verified here:
 
@@ -301,5 +334,5 @@ src/Checkers.Core          rules: PDN, move generation, notation; worker protoco
 src/Checkers.EngineHost    worker process: protocol loop, KingsRow adapter, builtin engine
 src/Checkers.Api           controllers, worker pool, cache, logging, wwwroot (test board), web.config
 tests/                     Checkers.Core.Tests, Checkers.Api.Tests
-deploy/                    Install-Engine, Install-IIS, Run-IISExpress, Test-Acceptance
+deploy/                    Install-Engine, Install-IIS, Run-IISExpress, Deploy-Azure, Test-Acceptance
 ```
